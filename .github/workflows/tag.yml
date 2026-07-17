@@ -1,0 +1,125 @@
+name: Tag
+
+# Creates and pushes a tag ONLY when CI passes on main. The tag push then
+# triggers release.yml to publish the GitHub Release.
+#
+# Flow:
+#   push to main → CI runs (ci.yml) → if success → tag.yml creates tag
+#                                                → tag push triggers release.yml
+#   push to main → CI fails       → tag.yml skipped (no tag, no release)
+#
+# Manual tag pushes (e.g., `git push origin v0.1.0`) bypass this and go
+# straight to release.yml, which runs its own test matrix.
+#
+# Why SSH for the push (not GITHUB_TOKEN): GitHub Actions deliberately does
+# NOT trigger downstream workflows from pushes that authenticate with
+# GITHUB_TOKEN (anti-loop protection). To make release.yml fire on the tag
+# push, we authenticate with a real SSH key registered on GitHub. The same
+# key is reused for SSH-format tag signing. See .github/SIGNING.md.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Create & push tag
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the EXACT commit that CI tested, not main's tip.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          # Use GITHUB_TOKEN for the initial clone (read-only is fine).
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup SSH (auth + signing)
+        env:
+          TAG_SIGNING_KEY: ${{ secrets.TAG_SIGNING_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # Same key is used for both pushing the tag (auth) and signing it.
+          printf '%s\n' "$TAG_SIGNING_KEY" > ~/.ssh/tag_key
+          chmod 600 ~/.ssh/tag_key
+          ssh-keyscan -t ed25519 github.com > ~/.ssh/known_hosts 2>/dev/null
+          # Configure git to sign tags with this SSH key.
+          git config --global gpg.format ssh
+          git config --global user.signingkey ~/.ssh/tag_key
+          # Override the remote to use SSH instead of HTTPS, so the tag push
+          # authenticates with our key (and therefore triggers release.yml).
+          git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
+
+      - name: Determine next version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          LATEST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
+
+          if [[ -z "$LATEST_TAG" ]]; then
+            # No tags yet: seed from VERSION file
+            VERSION="$(tr -d '[:space:]' < VERSION)"
+            echo "First tag from VERSION file: v$VERSION"
+          elif [[ "$(git rev-parse "$LATEST_TAG^{commit}" 2>/dev/null)" == "$HEAD_SHA" ]]; then
+            # Latest tag already points at the commit CI just verified
+            echo "Latest tag $LATEST_TAG already points to HEAD; skipping"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          else
+            # Bump based on commit body markers
+            CUR="${LATEST_TAG#v}"
+            MAJOR="$(echo "$CUR" | cut -d. -f1)"
+            MINOR="$(echo "$CUR" | cut -d. -f2)"
+            PATCH="$(echo "$CUR" | cut -d. -f3)"
+            BODY="$(git log -1 --pretty=%B)"
+            if [[ "$BODY" == *"#major"* ]]; then
+              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+            elif [[ "$BODY" == *"#minor"* ]]; then
+              MINOR=$((MINOR + 1)); PATCH=0
+            else
+              PATCH=$((PATCH + 1))
+            fi
+            VERSION="$MAJOR.$MINOR.$PATCH"
+            echo "Bumped $LATEST_TAG → v$VERSION"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        if: steps.version.outputs.skipped != 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION"
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+
+          # Sign with SSH if TAG_SIGNING_KEY is configured; otherwise warn
+          # and create an unsigned tag (the push will still trigger release).
+          if [[ -n "${TAG_SIGNING_KEY:-}" ]]; then
+            git tag -s "$TAG" -m "Release $TAG"
+          else
+            echo "::warning::TAG_SIGNING_KEY secret not set — creating an unsigned tag"
+            git tag "$TAG" -m "Release $TAG"
+          fi
+
+          git push origin "$TAG"
+          echo "Pushed $TAG"

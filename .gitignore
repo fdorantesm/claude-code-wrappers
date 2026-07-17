@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+.env.local
+*.tar.gz
+.idea/
+.vscode/
+*.swp
+.husky/_/
+*.bun-build
+
+.capycode
+.claude

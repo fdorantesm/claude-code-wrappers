@@ -1,0 +1,24 @@
+# Force LF on text files so Windows checkouts don't normalize line endings
+# and break tooling that diffs/format-checks the working tree.
+*               text=auto eol=lf
+*.json          text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.js            text eol=lf
+*.mjs           text eol=lf
+*.cjs           text eol=lf
+*.md            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.sh            text eol=lf
+*.toml          text eol=lf
+
+# Binary files — never normalize.
+*.png           binary
+*.jpg           binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.zip           binary
+*.tar.gz        binary
+bun.lockb       binary

@@ -1,0 +1,44 @@
+{
+  "name": "claude-code-wrappers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-provider Claude Code CLI wrapper",
+  "type": "module",
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "scripts": {
+    "build": "./scripts/build.sh",
+    "dev": "bun --watch src/bin/cw.ts",
+    "start": "bun src/bin/cw.ts",
+    "test": "bun test && bun run test:bash && bun run test:yaml",
+    "test:unit": "bun test",
+    "test:bash": "bats tests/bash/",
+    "test:yaml": "bash tests/yaml/syntax.test.sh",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": "biome format --write",
+    "*.json": "biome format --write"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "typescript": "^5.5.0",
+    "yaml": "^2.5.0"
+  },
+  "packageManager": "bun@1.2.0"
+}

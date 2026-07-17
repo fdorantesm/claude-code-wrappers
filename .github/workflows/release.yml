@@ -1,0 +1,166 @@
+name: Release
+
+# Triggered by a tag push. .github/workflows/tag.yml creates the tag on every
+# push to main; this workflow consumes the tag, runs the test matrix, builds
+# standalone binaries (bun build --compile) for all supported OS/arch combos,
+# and publishes a GitHub Release with the artifacts.
+#
+# Can also be triggered manually via the Actions tab (workflow_dispatch) for
+# re-running an existing release without pushing a new tag.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0). Leave empty for the latest."
+        required: false
+        default: ""
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ─────────────────────────────── test ────────────────────────────────────────
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.0
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Format check
+        run: bun run format:check
+
+      - name: Test
+        run: bun test --coverage
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage/coverage-final.json
+          flags: unittests
+          fail_ci_if_error: false
+
+  # ─────────────────────────────── release ─────────────────────────────────────
+  release:
+    name: Build & publish release
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Prefer the tag from the trigger; fall back to the dispatch input;
+          # otherwise use the latest v* tag.
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="$(git describe --tags --abbrev=0 --match 'v*')"
+          fi
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Resolved version: $VERSION (tag: $TAG)"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.0
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Build all targets
+        env:
+          VERSION: ${{ env.VERSION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          targets=(
+            "linux x64"
+            "linux arm64"
+            "darwin x64"
+            "darwin arm64"
+            "windows x64"
+            "windows arm64"
+          )
+          for target in "${targets[@]}"; do
+            read -r os arch <<< "$target"
+            echo "── building $os-$arch ──"
+            env TARGET_OS="$os" TARGET_ARCH="$arch" ./scripts/build.sh
+          done
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd dist
+          shasum -a 256 cw-* > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/fdorantesm/claude-code-wrappers/main/install.sh | bash
+            ```
+
+            Pin a version:
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/fdorantesm/claude-code-wrappers/main/install.sh | CW_VERSION=${{ env.VERSION }} bash
+            ```
+
+            The installer downloads a standalone binary (compiled with `bun build --compile`),
+            verifies the SHA-256 checksum, and installs `cw` to your local bin dir.
+          files: |
+            dist/cw-*
+            dist/checksums.txt
+          fail_on_unmatched_files: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cw-release-${{ env.VERSION }}
+          path: |
+            dist/cw-*
+            dist/checksums.txt
+          retention-days: 14

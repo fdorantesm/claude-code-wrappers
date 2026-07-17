@@ -1,0 +1,38 @@
+# bunfig.toml — Bun runtime + test configuration
+# https://bun.sh/docs/runtime/configuration
+
+[install]
+# Use the lockfile from package.json ("bun.lockb" is auto-generated)
+frozenLockfile = true
+
+[install.cache]
+disable = false
+disableManifest = false
+
+[test]
+# Use preload for global test setup (runs before each test file)
+preload = ["./test/helpers/setup.ts"]
+
+# Coverage thresholds for CI
+coverageThreshold = {
+  lines = 0.85,
+  functions = 0.85,
+  statements = 0.85,
+  branches = 0.80,
+}
+
+# Skip these from coverage
+coveragePathIgnorePatterns = [
+  "node_modules",
+  "dist",
+  "src/bin/.*\\.ts",     # entrypoints
+  "test/fixtures/.*",
+]
+
+[run]
+# Use Bun's shell which is faster than bash for short scripts
+shell = "system"
+
+[bun]
+# Minimum Bun version
+bun = true
