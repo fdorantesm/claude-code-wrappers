@@ -59,6 +59,11 @@ jobs:
           # Configure git to sign tags with this SSH key.
           git config --global gpg.format ssh
           git config --global user.signingkey ~/.ssh/tag_key
+          # Make git use THIS key for SSH (push auth), not whatever default
+          # ssh-agent offers. core.sshCommand applies to all git operations
+          # that go over SSH (clone, fetch, push), so the tag push authenticates
+          # with the deploy key registered on GitHub.
+          git config --global core.sshCommand "ssh -i ~/.ssh/tag_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
           # Override the remote to use SSH instead of HTTPS, so the tag push
           # authenticates with our key (and therefore triggers release.yml).
           git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
@@ -106,6 +111,7 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          TAG_SIGNING_KEY: ${{ secrets.TAG_SIGNING_KEY }}
         run: |
           set -euo pipefail
           TAG="v$VERSION"
@@ -121,5 +127,8 @@ jobs:
             git tag "$TAG" -m "Release $TAG"
           fi
 
+          # Belt-and-suspenders: also set GIT_SSH_COMMAND so the push uses
+          # our deploy key regardless of how git resolves its config.
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tag_key -o IdentitiesOnly=yes"
           git push origin "$TAG"
           echo "Pushed $TAG"
