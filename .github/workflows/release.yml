@@ -1,9 +1,12 @@
 name: Release
 
 # Triggered by a tag push. .github/workflows/tag.yml creates the tag on every
-# push to main; this workflow consumes the tag, runs the test matrix, builds
-# standalone binaries (bun build --compile) for all supported OS/arch combos,
-# and publishes a GitHub Release with the artifacts.
+# push to main; this workflow consumes the tag, builds standalone binaries
+# (bun build --compile) for all supported OS/arch combos, and publishes a
+# GitHub Release with the artifacts.
+#
+# Testing happens in the CI workflow before tag.yml runs, so we don't repeat
+# it here — that would just double CI time on every release.
 #
 # Can also be triggered manually via the Actions tab (workflow_dispatch) for
 # re-running an existing release without pushing a new tag.
@@ -27,50 +30,9 @@ permissions:
   contents: write
 
 jobs:
-  # ─────────────────────────────── test ────────────────────────────────────────
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.2.0
-
-      - name: Install deps
-        run: bun install --frozen-lockfile
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Format check
-        run: bun run format:check
-
-      - name: Test
-        run: bun run test:unit
-
-      - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest'
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.os }}
-          path: coverage/
-          retention-days: 7
-          if-no-files-found: ignore
-
   # ─────────────────────────────── release ─────────────────────────────────────
   release:
     name: Build & publish release
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

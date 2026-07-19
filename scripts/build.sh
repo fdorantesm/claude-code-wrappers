@@ -26,9 +26,9 @@ die() { printf '[build] ERROR: %s\n' "$*" >&2; exit 1; }
 # ─────────────────────────────── target ───────────────────────────────────────
 target_os="${TARGET_OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
 case "$target_os" in
-  linux*)         target_os="linux" ;;
-  darwin*)        target_os="darwin" ;;
-  mingw*|msys*|cygwin*) target_os="windows" ;;
+  linux*)                     target_os="linux" ;;
+  darwin*)                    target_os="darwin" ;;
+  windows|mingw*|msys*|cygwin*) target_os="windows" ;;
   *) die "Unsupported OS: $target_os" ;;
 esac
 
