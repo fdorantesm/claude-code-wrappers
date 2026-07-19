@@ -79,7 +79,6 @@ jobs:
             "darwin x64"
             "darwin arm64"
             "windows x64"
-            "windows arm64"
           )
           for target in "${targets[@]}"; do
             read -r os arch <<< "$target"
