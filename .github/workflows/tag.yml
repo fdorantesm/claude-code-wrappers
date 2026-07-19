@@ -63,20 +63,6 @@ jobs:
           # authenticates with our key (and therefore triggers release.yml).
           git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
 
-          # DEBUG — borra cuando funcione
-          echo "── DEBUG ──"
-          echo "tag_key bytes: $(wc -c < ~/.ssh/tag_key)"
-          echo "tag_key sha256: $(ssh-keygen -lf ~/.ssh/tag_key 2>&1 || true)"
-          echo "remote: $(git remote get-url origin)"
-          echo "known_hosts: $(wc -l < ~/.ssh/known_hosts) lines"
-          echo "── ssh test ──"
-          set +e
-          ssh -vvT -i ~/.ssh/tag_key git@github.com 2>&1 | tail -25
-          SSH_EXIT=$?
-          set -e
-          echo "── ssh exit code: $SSH_EXIT ──"
-          exit 1   # force fail to surface the debug output
-
       - name: Determine next version
         id: version
         shell: bash
