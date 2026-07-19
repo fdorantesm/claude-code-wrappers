@@ -34,8 +34,8 @@ esac
 
 target_arch="${TARGET_ARCH:-$(uname -m)}"
 case "$target_arch" in
-  x86_64|amd64)  target_arch="x64" ;;
-  aarch64|arm64) target_arch="arm64" ;;
+  x86_64|amd64|x64)   target_arch="x64" ;;
+  aarch64|arm64)      target_arch="arm64" ;;
   *) die "Unsupported arch: $target_arch" ;;
 esac
 
