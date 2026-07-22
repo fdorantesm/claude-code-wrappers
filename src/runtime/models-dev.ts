@@ -17,6 +17,7 @@ import type { XdgPaths } from "../xdg/paths.js"
 
 const MODELS_DEV_URL = "https://models.dev/api.json"
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000 // 24h
+const FETCH_TIMEOUT_MS = 5_000
 
 export interface ModelsDevModel {
   id: string
@@ -115,7 +116,7 @@ export async function fetchAndCache(xdg: XdgPaths): Promise<ModelsDevCatalog> {
   const path = cachePath(xdg)
   mkdirSync(join(xdg.dataDir, "cache"), { recursive: true })
 
-  const res = await fetch(MODELS_DEV_URL)
+  const res = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`models.dev returned ${res.status}`)
   const data = (await res.json()) as Record<string, ModelsDevProvider>
 
